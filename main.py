@@ -61,12 +61,13 @@ def detect_entities(text):
     return entities
 
 
-with open("data/tables/re_tables-0001.json", 'r') as tables:
+with open("data/tables/re_tables-0001.json", 'r') as tables, open("data/tables/table-core.json", 'r') as core:
     tables_json = json.load(tables)
+    table_core = json.load(core)
     start = time.clock()
     for t in tables_json:
         table = tables_json[t]
-        print(table)
+        # print(table)
         # check for empty table
         if not(table['numDataRows'] == 0 or table['numCols'] == 0):
             entities = set([])  # using a set so duplicates are not added
@@ -76,7 +77,7 @@ with open("data/tables/re_tables-0001.json", 'r') as tables:
             table_caption = table['caption']  # use this to extract entities as well
             # print(table_caption)
             entities |= detect_entities(table_caption)
-            main_col = detect_main_col(table)
+            main_col = table_core[t]
             # print("Main column is number %d, which is named %s" % (main_col, table['title'][main_col]))
             # next step is to extract entities from main column
             entities |= detect_column_entities(table['data'], main_col)
