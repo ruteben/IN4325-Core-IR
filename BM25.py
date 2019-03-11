@@ -3,24 +3,26 @@ import json
 import numpy as np
 import re
 import time
+from multiprocessing.dummy import Pool as ThreadPool
+import io
+
 
 def retrieve_entities_BM25(text):
-    with open("data/tables/re_tables-0001.json", 'r') as tables:
-        entities = set([])  # using a set so duplicates are not added
-        es = Elasticsearch()
+    es = Elasticsearch()
+    index = "dbpedia_2015_10"
 
-        index = "dbpedia_2015_10"
-
-        query = {
-            "sort": ["_score"],
-            "query": {
-                "match": {
-                    "names": text
-                }
+    query = {
+        "query": {
+            "match": {
+                "catchall": text
             }
         }
-        res = es.search(index, body=query)
-        for hit in res['hits']['hits']:
-            print(hit['_source'])
-            entities |= set(hit['_source']['names'])
-        return entities
+    }
+
+    res = es.search(index, body=query)
+    for table in res['hits']['hits']:
+        print(table['_id'])
+
+
+retrieve_entities_BM25("banana")
+
