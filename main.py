@@ -88,7 +88,7 @@ def retrieve(table_name):
 
 
 with io.open("data/tables/table.json", 'r') as tables, open("data/tables/table-core.json", 'r') as core:
-    pool = ThreadPool(1)
+    pool = ThreadPool(64)
     all_entities = []
     table_core = json.load(core)
     start = time.clock()
@@ -97,9 +97,7 @@ with io.open("data/tables/table.json", 'r') as tables, open("data/tables/table-c
         tables_json = json.loads(line)
         all_entities += pool.map(retrieve, tables_json.keys())
         counter += 1
-        if counter % 100 == 0:
+        if counter % 1000 == 0:
             print("processed %d tables" % counter)
-            print(len(all_entities))
     end = time.clock()
     print("Entire file took %s seconds" % (end-start))
-    print(len(all_entities))
