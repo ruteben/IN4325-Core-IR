@@ -5,6 +5,7 @@ import re
 import time
 from multiprocessing.dummy import Pool as ThreadPool
 import io
+import math
 
 # 1. Goal: Represent the raw content of the query/table as a set of terms, where terms are entities from a knowledge base. {q1, ...., 1n} for query q and {t1, ..., tm} for table T.
 # 1.1. Detect Core Column, this column has the highest ratio of entities
@@ -110,6 +111,7 @@ def execute_single_field_query(index, query, field):
     es = Elasticsearch()
     request = {
         "sort": "_score",
+        "size": 20,
         "query": {
             "match": {
                 field: query
@@ -144,18 +146,48 @@ def qrel(query_nr, table_id):
         return 0
 
 
+def qrels(query_nr):
+    relevance = []
+    with io.open('data/qrels.txt', 'r') as qrels:
+        for line in qrels:
+            qrel = line.split("\t")
+            if qrel[0] == query_nr:
+                relevance.append(int(qrel[3]))
+    return relevance
+
+
+def ndcg(relevance, k, true_relevance):
+    dcg = 0
+    idcg = 0
+    for i in range(k):
+        if i < len(relevance):
+            dcg += (2**relevance[i] - 1) / math.log2(i+1 + 1)
+        if i < len(true_relevance):
+            idcg += (2**true_relevance[i] - 1) / math.log2(i+1 + 1)
+    if idcg == 0:
+        return 0
+    return dcg/idcg
+
+
 if __name__ == '__main__':
     index = "wikitable"
     fields = ["catchall", "page_title", "table_caption", "table_content"]
+    ndcg_at_k = [0, 0, 0, 0]
     with io.open("data/queries.txt", 'r') as queries:
         # execute all queries
         for line in queries:
             query_nr = line.split(" ")[0]
             query = " ".join(line.split(" ")[1:])[:-1]
-            # for each query execute both single and multi field ranking
+            print(query)
             res_single = execute_single_field_query(index, query, fields[0])
-            # res_multi = execute_multi_field_query(index, query, fields[1:])
+            relevance = []
             for table in res_single['hits']['hits']:
                 table_id = table['_source']['table_id']
-                relevance = qrel(query_nr, table_id)
-                print("query '%s' and '%s' have relevance %d" % (query, table_id, relevance))
+                relevance.append(qrel(query_nr, table_id))
+                # print("query '%s' and '%s' have relevance %d" % (query, table_id, relevance))
+            true_relevance = qrels(query_nr)
+            ndcg_at_k[0] += ndcg(relevance, 5, true_relevance)
+            ndcg_at_k[1] += ndcg(relevance, 10, true_relevance)
+            ndcg_at_k[2] += ndcg(relevance, 15, true_relevance)
+            ndcg_at_k[3] += ndcg(relevance, 20, true_relevance)
+    print(np.array(ndcg_at_k)/60)
