@@ -11,6 +11,8 @@ import io
 # 1.2. Extract all entities from Core Column, extract top-k (k=10) entities from page title, table caption ranked using Mixture of Language Models approach.
 # 1.3. Extract top-k (k=10) entities from query by issueing the same query against a knowledge base.
 
+table_core = {}
+tables_json = {}
 
 # Detect the main column, based on the number of entities in each column of the table
 def detect_main_col(table):
@@ -87,17 +89,73 @@ def retrieve(table_name):
     return None
 
 
-with io.open("data/tables/table.json", 'r') as tables, open("data/tables/table-core.json", 'r') as core:
-    pool = ThreadPool(64)
-    all_entities = []
-    table_core = json.load(core)
-    start = time.clock()
-    counter = 0
-    for line in tables:
-        tables_json = json.loads(line)
-        all_entities += pool.map(retrieve, tables_json.keys())
-        counter += 1
-        if counter % 1000 == 0:
-            print("processed %d tables" % counter)
-    end = time.clock()
-    print("Entire file took %s seconds" % (end-start))
+def create_vectors():
+    with io.open("data/tables/table.json", 'r') as tables, open("data/tables/table-core.json", 'r') as core:
+        pool = ThreadPool(32)
+        all_entities = []
+        table_core = json.load(core)  # shadowing is intended, use as global variable
+        start = time.clock()
+        counter = 0
+        for line in tables:
+            tables_json = json.loads(line)  # shadowing is intended, use as global variable
+            all_entities += pool.map(retrieve, tables_json.keys())
+            counter += 1
+            if counter % 1000 == 0:
+                print("processed %d tables" % counter)
+        end = time.clock()
+        print("Entire file took %s seconds" % (end-start))
+
+
+def execute_single_field_query(index, query, field):
+    es = Elasticsearch()
+    request = {
+        "sort": "_score",
+        "query": {
+            "match": {
+                field: query
+            }
+        }
+    }
+    res = es.search(index, body=request)
+    return res
+
+
+def execute_multi_field_query(index, query, fields):
+    es = Elasticsearch()
+    request = {
+        "sort": "_score",
+        "query": {
+            "multi_match": {
+                "query": query,
+                "fields": fields
+            }
+        }
+    }
+    res = es.search(index, body=request)
+    return res
+
+
+def qrel(query_nr, table_id):
+    with io.open('data/qrels.txt', 'r') as qrels:
+        for line in qrels:
+            qrel = line.split("\t")
+            if qrel[0] == query_nr and qrel[2] == table_id:
+                return int(qrel[3])
+        return 0
+
+
+if __name__ == '__main__':
+    index = "wikitable"
+    fields = ["catchall", "page_title", "table_caption", "table_content"]
+    with io.open("data/queries.txt", 'r') as queries:
+        # execute all queries
+        for line in queries:
+            query_nr = line.split(" ")[0]
+            query = " ".join(line.split(" ")[1:])[:-1]
+            # for each query execute both single and multi field ranking
+            res_single = execute_single_field_query(index, query, fields[0])
+            # res_multi = execute_multi_field_query(index, query, fields[1:])
+            for table in res_single['hits']['hits']:
+                table_id = table['_source']['table_id']
+                relevance = qrel(query_nr, table_id)
+                print("query '%s' and '%s' have relevance %d" % (query, table_id, relevance))
