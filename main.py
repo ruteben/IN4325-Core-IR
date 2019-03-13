@@ -126,6 +126,7 @@ def execute_multi_field_query(index, query, fields):
     es = Elasticsearch()
     request = {
         "sort": "_score",
+        "size": 20,
         "query": {
             "multi_match": {
                 "query": query,
@@ -134,6 +135,7 @@ def execute_multi_field_query(index, query, fields):
         }
     }
     res = es.search(index, body=request)
+    # res = es.explain(index=index, body=request, id='5c8642f97ca1ce9c04be01ec', doc_type='doc')
     return res
 
 
@@ -170,8 +172,8 @@ def ndcg(relevance, k, true_relevance):
 
 
 if __name__ == '__main__':
-    index = "wikitable"
-    fields = ["catchall", "page_title", "table_caption", "table_content"]
+    index = "wikitable-mlm"
+    fields = ["catchall", "page_title", "table_caption", "table_content", "table_title", "table_headings"]
     ndcg_at_k = [0, 0, 0, 0]
     with io.open("data/queries.txt", 'r') as queries:
         # execute all queries
